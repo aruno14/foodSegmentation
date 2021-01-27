@@ -14,32 +14,26 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 import matplotlib.pyplot as plt
 from PIL import Image
 
-#IMG_HEIGHT=600
-#IMG_WIDTH=800
-IMG_HEIGHT=416
-IMG_WIDTH=256
+IMG_HEIGHT, IMG_WIDTH=256, 256
 
-#x_files = glob('myData/images/*')
-#y_files = glob('myData/masks/*')
-x_files = glob('TrayDataset/TrayDataset/XTrain/*')
-y_files = glob('TrayDataset/TrayDataset/yTrain/*')
+x_files = glob('myData/images/*')
+y_files = glob('myData/masks/*')
 
 files_ds = tf.data.Dataset.from_tensor_slices((x_files, y_files))
 
-def process_img(file_path:str, channels=3, diviser=1):
+def process_img(file_path:str, channels=3):
     img = tf.io.read_file(file_path)
     img = tf.image.decode_jpeg(img, channels=channels)
-    img = tf.image.convert_image_dtype(img, tf.float32)
-    img = tf.image.resize(img, size=(IMG_HEIGHT//diviser, IMG_WIDTH//diviser))
+    img = tf.image.convert_image_dtype(img, tf.float32)#0~1
+    img = tf.image.resize(img, size=(IMG_HEIGHT, IMG_WIDTH))
     return img
 
-files_ds = files_ds.map(lambda x, y: (process_img(x), process_img(y, channels=3, diviser=2))).batch(1)
+files_ds = files_ds.map(lambda x, y: (process_img(x), process_img(y, channels=1))).batch(1)
 
 
 def get_model(IMG_HEIGHT, IMG_WIDTH):
     in1 = Input(shape=(IMG_HEIGHT, IMG_WIDTH, 3))
-    preprop = tf.keras.layers.experimental.preprocessing.Resizing(IMG_HEIGHT//2, IMG_WIDTH//2)(in1)
-    preprop = tf.keras.layers.experimental.preprocessing.Rescaling(1./255)(preprop)
+    preprop = in1
     preprop = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical")(preprop)
     preprop = tf.keras.layers.experimental.preprocessing.RandomRotation(0.2)(preprop)
 
@@ -81,7 +75,6 @@ def get_model(IMG_HEIGHT, IMG_WIDTH):
     model = Model(inputs=[in1], outputs=[segmentation])
 
     losses = {'seg': 'binary_crossentropy'}
-    #losses = {'seg': 'mean_squared_error'}
 
     metrics = {'seg': ['acc']}
     model.compile(optimizer="adam", loss = losses, metrics=metrics)
@@ -100,34 +93,31 @@ tf.keras.utils.plot_model(model, show_shapes=True)
 def showPrediction(imagePath:str, count=0):
     test_image = process_img(imagePath)
     predictions = model.predict(np.asarray([test_image]))
-    predictions *= 255
-    predicted_image = predictions[0]
+    predicted_image = predictions[0]*255
 
-    #im = Image.fromarray(np.squeeze(predicted_image), mode="L")
-    print(predicted_image.shape)
-    im = Image.fromarray(predicted_image, mode="RGB")
+    im = Image.fromarray(np.squeeze(predicted_image), mode="L")
     im.save("predict-"+str(count)+".png")
 
     return test_image, predictions
 
 class DisplayCallback(tf.keras.callbacks.Callback):
   def on_epoch_end(self, epoch, logs=None):
-    #test_image, predictions = showPrediction("myData/images/assiette-01.jpg", epoch)
-    test_image, predictions = showPrediction("TrayDataset/TrayDataset/XTrain/image-1001a01.jpg", epoch)
+    test_image, predictions = showPrediction("data/images/assiette-01.jpg", epoch)
 
     file_writer = tf.summary.create_file_writer(log_dir)
 
     with file_writer.as_default():
-      tf.summary.image("Training data", predictions, step=epoch)
-      tf.summary.image("Input data", [test_image], step=epoch)
+      tf.summary.image("Training data", predictions*255, step=epoch)
+      tf.summary.image("Input data", [test_image*255], step=epoch)
 
 log_dir = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-epochs = 5
-print(files_ds)
+epochs = 50
+batch_size = 128
 #tensorboard --logdir logs/
-history = model.fit(files_ds, epochs=epochs, steps_per_epoch=100, callbacks=[tensorboard_callback, DisplayCallback()])#, steps_per_epoch=10
+history = model.fit(files_ds, epochs=epochs, batch_size=batch_size, callbacks=[tensorboard_callback, DisplayCallback()])
+
 model.save(model_name)
 
 metrics = history.history
@@ -137,6 +127,3 @@ plt.legend(['loss', 'acc'])
 plt.savefig("fit-history.png")
 plt.show()
 plt.close()
-
-#for image_path in ["myData/images/assiette-01.jpg", "myData/images/choucroute-01.jpg"]:
-#    showPrediction(image_path)
