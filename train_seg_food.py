@@ -13,8 +13,9 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 
 import matplotlib.pyplot as plt
 from PIL import Image
+import cv2
 
-IMG_HEIGHT, IMG_WIDTH=256, 256
+IMG_HEIGHT, IMG_WIDTH=128, 128
 
 x_files = glob('data/images/*')
 y_files = glob('data/masks/*')
@@ -93,27 +94,29 @@ tf.keras.utils.plot_model(model, show_shapes=True)
 def showPrediction(imagePath:str, count=0):
     test_image = process_img(imagePath)
     predictions = model.predict(np.asarray([test_image]))
-    predicted_image = predictions[0]*255
+    predicted_image = predictions[0]
 
-    im = Image.fromarray(np.squeeze(predicted_image), mode="L")
-    im.save("predict-"+str(count)+".png")
+    test_image = np.asarray(test_image)
+
+    cv2.imwrite("input-"+str(count)+".png", cv2.cvtColor(test_image*255, cv2.COLOR_RGB2BGR))
+    cv2.imwrite("predict-"+str(count)+".png", np.squeeze(predicted_image)*255)
 
     return test_image, predictions
 
 class DisplayCallback(tf.keras.callbacks.Callback):
   def on_epoch_end(self, epoch, logs=None):
-    test_image, predictions = showPrediction("data/images/assiette-01.jpg", epoch)
+    test_image, predictions = showPrediction("data/images/assiette-01.jpg", 0)
 
     file_writer = tf.summary.create_file_writer(log_dir)
 
     with file_writer.as_default():
-      tf.summary.image("Training data", predictions*255, step=epoch)
-      tf.summary.image("Input data", [test_image*255], step=epoch)
+      tf.summary.image("Training data", predictions, step=epoch)
+      tf.summary.image("Input data", [test_image], step=epoch)
 
 log_dir = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-epochs = 50
+epochs = 10
 batch_size = 128
 #tensorboard --logdir logs/
 history = model.fit(files_ds, epochs=epochs, batch_size=batch_size, callbacks=[tensorboard_callback, DisplayCallback()])
