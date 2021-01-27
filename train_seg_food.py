@@ -13,7 +13,6 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 
 import matplotlib.pyplot as plt
 from PIL import Image
-import cv2
 
 IMG_HEIGHT, IMG_WIDTH=128, 128
 
@@ -97,9 +96,15 @@ def showPrediction(imagePath:str, count=0):
     predicted_image = predictions[0]
 
     test_image = np.asarray(test_image)
-
-    cv2.imwrite("input-"+str(count)+".png", cv2.cvtColor(test_image*255, cv2.COLOR_RGB2BGR))
-    cv2.imwrite("predict-"+str(count)+".png", np.squeeze(predicted_image)*255)
+    
+    # convert float to uint8
+    test_image_uint8 = (test_image*255).astype('uint8')
+    prediction_image_uint8 = (np.squeeze(predicted_image)*255).astype('uint8')
+    
+    # mode "RGB" = 3x8-bit pixels, true color
+    Image.fromarray(test_image_uint8, mode="RGB").save("input-" + str(count) + ".png")
+    # mode "L" = 8-bit pixels, black and white
+    Image.fromarray(prediction_image_uint8, mode="L").save("predict-" + str(count) + ".png")
 
     return test_image, predictions
 
