@@ -16,8 +16,8 @@ from PIL import Image
 
 IMG_HEIGHT, IMG_WIDTH=256, 256
 
-x_files = glob('myData/images/*')
-y_files = glob('myData/masks/*')
+x_files = glob('data/images/*')
+y_files = glob('data/masks/*')
 
 files_ds = tf.data.Dataset.from_tensor_slices((x_files, y_files))
 
@@ -70,7 +70,7 @@ def get_model(IMG_HEIGHT, IMG_WIDTH):
     conv7 = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(up2)
     conv7 = Dropout(0.2)(conv7)
     conv7 = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(conv7)
-    segmentation = Conv2D(3, (1, 1), activation='sigmoid', name='seg')(conv7)
+    segmentation = Conv2D(1, (1, 1), activation='sigmoid', name='seg')(conv7)
 
     model = Model(inputs=[in1], outputs=[segmentation])
 
