@@ -14,7 +14,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 import matplotlib.pyplot as plt
 from PIL import Image
 
-IMG_HEIGHT, IMG_WIDTH=128, 128
+IMG_HEIGHT, IMG_WIDTH=256, 256
 
 x_files = glob('data/images/*')
 y_files = glob('data/masks/*')
@@ -30,12 +30,14 @@ def process_img(file_path:str, channels=3):
 
 files_ds = files_ds.map(lambda x, y: (process_img(x), process_img(y, channels=1))).batch(1)
 
+test_images_path = ["data/images/assiette-01.jpg", "data/images/choucroute-01.jpg", "data/images/repas-france-08.jpg"]
+test_images = [process_img(path) for path in test_images_path]
 
 def get_model(IMG_HEIGHT, IMG_WIDTH):
     in1 = Input(shape=(IMG_HEIGHT, IMG_WIDTH, 3))
     preprop = in1
-    preprop = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical")(preprop)
-    preprop = tf.keras.layers.experimental.preprocessing.RandomRotation(0.2)(preprop)
+    #preprop = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical")(preprop)
+    #preprop = tf.keras.layers.experimental.preprocessing.RandomRotation(0.2)(preprop)
 
     conv1 = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(preprop)#(in1)
     conv1 = Dropout(0.2)(conv1)
@@ -90,39 +92,40 @@ else:
 model.summary()
 tf.keras.utils.plot_model(model, show_shapes=True)
 
-def showPrediction(imagePath:str, count=0):
-    test_image = process_img(imagePath)
-    predictions = model.predict(np.asarray([test_image]))
-    predicted_image = predictions[0]
+def showPrediction(test_images):
+    predictions = model.predict(np.asarray(test_images))
 
-    test_image = np.asarray(test_image)
-    
-    # convert float to uint8
-    test_image_uint8 = (test_image*255).astype('uint8')
-    prediction_image_uint8 = (np.squeeze(predicted_image)*255).astype('uint8')
-    
-    # mode "RGB" = 3x8-bit pixels, true color
-    Image.fromarray(test_image_uint8, mode="RGB").save("input-" + str(count) + ".png")
-    # mode "L" = 8-bit pixels, black and white
-    Image.fromarray(prediction_image_uint8, mode="L").save("predict-" + str(count) + ".png")
+    for i, test_image in enumerate(test_images):
+        test_image = np.asarray(test_image)
+        predicted_image = predictions[i]
 
-    return test_image, predictions
+        # convert float to uint8
+        test_image_uint8 = (test_image*255).astype('uint8')
+        prediction_image_uint8 = (np.squeeze(predicted_image)*255).astype('uint8')
+
+        # mode "RGB" = 3x8-bit pixels, true color
+        Image.fromarray(test_image_uint8, mode="RGB").save("input-" + str(i) + ".png")
+        # mode "L" = 8-bit pixels, black and white
+        Image.fromarray(prediction_image_uint8, mode="L").save("predict-" + str(i) + ".png")
+
+    return predictions
 
 class DisplayCallback(tf.keras.callbacks.Callback):
   def on_epoch_end(self, epoch, logs=None):
-    test_image, predictions = showPrediction("data/images/assiette-01.jpg", 0)
+    predictions = showPrediction(test_images)
 
     file_writer = tf.summary.create_file_writer(log_dir)
 
     with file_writer.as_default():
       tf.summary.image("Training data", predictions, step=epoch)
-      tf.summary.image("Input data", [test_image], step=epoch)
+      tf.summary.image("Input data", test_images, step=epoch)
 
 log_dir = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-epochs = 10
+epochs = 50
 batch_size = 128
+
 #tensorboard --logdir logs/
 history = model.fit(files_ds, epochs=epochs, batch_size=batch_size, callbacks=[tensorboard_callback, DisplayCallback()])
 
