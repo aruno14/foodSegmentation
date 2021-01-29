@@ -4,7 +4,6 @@ from datetime import datetime
 import numpy as np
 
 import tensorflow as tf
-from tensorflow.keras import backend as K
 from tensorflow.keras.layers import Activation, Lambda, GlobalAveragePooling2D, concatenate
 from tensorflow.keras.layers import UpSampling2D, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose
 from tensorflow.keras.layers import Dense, Flatten, Input
@@ -77,6 +76,7 @@ def get_model(IMG_HEIGHT, IMG_WIDTH):
     model = Model(inputs=[in1], outputs=[segmentation])
 
     losses = {'seg': 'binary_crossentropy'}
+    #losses = {'seg': 'mean_squared_error'}
 
     metrics = {'seg': ['acc']}
     model.compile(optimizer="adam", loss = losses, metrics=metrics)
@@ -115,7 +115,6 @@ class DisplayCallback(tf.keras.callbacks.Callback):
     predictions = showPrediction(test_images)
 
     file_writer = tf.summary.create_file_writer(log_dir)
-
     with file_writer.as_default():
       tf.summary.image("Training data", predictions, step=epoch)
       tf.summary.image("Input data", test_images, step=epoch)
