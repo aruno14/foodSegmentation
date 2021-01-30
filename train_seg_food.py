@@ -18,7 +18,11 @@ IMG_HEIGHT, IMG_WIDTH=256, 256
 x_files = glob('data/images/*')
 y_files = glob('data/masks/*')
 
+x_files_test = glob('data/imagesTest/*')
+y_files_test = glob('data/masksTest/*')
+
 files_ds = tf.data.Dataset.from_tensor_slices((x_files, y_files))
+files_ds_test = tf.data.Dataset.from_tensor_slices((x_files_test, y_files_test))
 
 def process_img(file_path:str, channels=3):
     img = tf.io.read_file(file_path)
@@ -28,8 +32,9 @@ def process_img(file_path:str, channels=3):
     return img
 
 files_ds = files_ds.map(lambda x, y: (process_img(x), process_img(y, channels=1))).batch(1)
+files_ds_test = files_ds_test.map(lambda x, y: (process_img(x), process_img(y, channels=1))).batch(1)
 
-test_images_path = ["data/images/assiette-01.jpg", "data/images/choucroute-01.jpg", "data/images/repas-france-08.jpg"]
+test_images_path = ["data/images/assiette-01.jpg", "data/images/choucroute-01.jpg", "data/images/repas-france-08.jpg"] + x_files_test
 test_images = [process_img(path) for path in test_images_path]
 
 def get_model(IMG_HEIGHT, IMG_WIDTH):
@@ -126,7 +131,7 @@ epochs = 50
 batch_size = 128
 
 #tensorboard --logdir logs/
-history = model.fit(files_ds, epochs=epochs, batch_size=batch_size, callbacks=[tensorboard_callback, DisplayCallback()])
+history = model.fit(files_ds, epochs=epochs, batch_size=batch_size, validation_data=files_ds_test, callbacks=[tensorboard_callback, DisplayCallback()])
 
 model.save(model_name)
 
