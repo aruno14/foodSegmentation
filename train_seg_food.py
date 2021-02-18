@@ -13,7 +13,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 import matplotlib.pyplot as plt
 from PIL import Image
 
-IMG_HEIGHT, IMG_WIDTH=256, 256
+IMG_HEIGHT, IMG_WIDTH=128, 128
 
 x_files = glob('data/images/*')
 y_files = glob('data/masks/*')
@@ -82,6 +82,7 @@ def get_model(IMG_HEIGHT, IMG_WIDTH):
 
     losses = {'seg': 'binary_crossentropy'}
     #losses = {'seg': 'mean_squared_error'}
+    #losses = {'seg': 'categorical_crossentropy'}
 
     metrics = {'seg': ['acc']}
     model.compile(optimizer="adam", loss = losses, metrics=metrics)
@@ -97,12 +98,20 @@ else:
 model.summary()
 tf.keras.utils.plot_model(model, show_shapes=True)
 
+def imageExtraction(input_image, mask, i):
+    output_image = input_image * mask
+    output_image = (output_image*255).astype('uint8')
+    Image.fromarray(output_image, mode="RGB").save("output-" + str(i) + ".png")
+
+
 def showPrediction(test_images):
     predictions = model.predict(np.asarray(test_images))
 
     for i, test_image in enumerate(test_images):
         test_image = np.asarray(test_image)
         predicted_image = predictions[i]
+
+        imageExtraction(test_image, predicted_image, i)
 
         # convert float to uint8
         test_image_uint8 = (test_image*255).astype('uint8')
@@ -127,11 +136,11 @@ class DisplayCallback(tf.keras.callbacks.Callback):
 log_dir = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-epochs = 50
+epochs = 5
 batch_size = 128
 
 #tensorboard --logdir logs/
-history = model.fit(files_ds, epochs=epochs, batch_size=batch_size, validation_data=files_ds_test, callbacks=[tensorboard_callback, DisplayCallback()])
+history = model.fit(files_ds, epochs=epochs, steps_per_epoch=10, batch_size=batch_size, validation_data=files_ds_test, callbacks=[tensorboard_callback, DisplayCallback()])
 
 model.save(model_name)
 
