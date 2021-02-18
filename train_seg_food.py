@@ -2,6 +2,7 @@ import os
 from glob import glob
 from datetime import datetime
 import numpy as np
+from scipy import ndimage
 
 import tensorflow as tf
 from tensorflow.keras.layers import Activation, Lambda, GlobalAveragePooling2D, concatenate
@@ -99,8 +100,17 @@ model.summary()
 tf.keras.utils.plot_model(model, show_shapes=True)
 
 def imageExtraction(input_image, mask, i):
-    output_image = input_image * mask
+    #Crop
+    coords = np.argwhere(mask > 0)
+    x_min, y_min = coords.min(axis=0)
+    x_max, y_max = coords.max(axis=0)
+    cropped_mask = mask[x_min:x_max+1, y_min:y_max+1]
+    cropped_input = input_image[x_min:x_max+1, y_min:y_max+1]
+
+    #output_image = input_image * mask
+    output_image = cropped_input * np.expand_dims(cropped_mask, axis=-1)
     output_image = (output_image*255).astype('uint8')
+
     Image.fromarray(output_image, mode="RGB").save("output-" + str(i) + ".png")
 
 
@@ -109,13 +119,21 @@ def showPrediction(test_images):
 
     for i, test_image in enumerate(test_images):
         test_image = np.asarray(test_image)
-        predicted_image = predictions[i]
+        predicted_image = np.squeeze(predictions[i])
+        predicted_image = np.where((predicted_image > 0.8), 1, 0)
+
+        # Remove small white regions
+        predicted_image = ndimage.binary_opening(predicted_image, iterations=3)
+        # Remove small black hole
+        predicted_image = ndimage.binary_closing(predicted_image, iterations=3)
+
+        predicted_image = ndimage.binary_dilation(predicted_image, iterations=3)
 
         imageExtraction(test_image, predicted_image, i)
 
         # convert float to uint8
         test_image_uint8 = (test_image*255).astype('uint8')
-        prediction_image_uint8 = (np.squeeze(predicted_image)*255).astype('uint8')
+        prediction_image_uint8 = (predicted_image*255).astype('uint8')
 
         # mode "RGB" = 3x8-bit pixels, true color
         Image.fromarray(test_image_uint8, mode="RGB").save("input-" + str(i) + ".png")
@@ -140,7 +158,8 @@ epochs = 5
 batch_size = 128
 
 #tensorboard --logdir logs/
-history = model.fit(files_ds, epochs=epochs, steps_per_epoch=10, batch_size=batch_size, validation_data=files_ds_test, callbacks=[tensorboard_callback, DisplayCallback()])
+history = model.fit(files_ds, epochs=epochs, batch_size=batch_size, validation_data=files_ds_test, callbacks=[tensorboard_callback, DisplayCallback()])
+#history = model.fit(files_ds, epochs=1, steps_per_epoch=1, batch_size=batch_size, validation_data=files_ds_test, callbacks=[tensorboard_callback, DisplayCallback()])
 
 model.save(model_name)
 
