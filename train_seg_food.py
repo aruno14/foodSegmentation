@@ -35,14 +35,14 @@ def process_img(file_path:str, channels=3):
 files_ds = files_ds.map(lambda x, y: (process_img(x), process_img(y, channels=1))).batch(1)
 files_ds_test = files_ds_test.map(lambda x, y: (process_img(x), process_img(y, channels=1))).batch(1)
 
-test_images_path = ["data/images/assiette-01.jpg", "data/images/choucroute-01.jpg", "data/images/repas-france-08.jpg"] + x_files_test
+test_images_path = ["data/images/table.jpg", "data/images/assiette-01.jpg", "data/images/choucroute-01.jpg", "data/images/repas-france-08.jpg"] + x_files_test
 test_images = [process_img(path) for path in test_images_path]
 
 def get_model(IMG_HEIGHT, IMG_WIDTH):
     in1 = Input(shape=(IMG_HEIGHT, IMG_WIDTH, 3))
     preprop = in1
-    #preprop = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical")(preprop)
-    #preprop = tf.keras.layers.experimental.preprocessing.RandomRotation(0.2)(preprop)
+    preprop = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical")(preprop)
+    preprop = tf.keras.layers.experimental.preprocessing.RandomRotation(0.2)(preprop)
 
     conv1 = Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(preprop)#(in1)
     conv1 = Dropout(0.2)(conv1)
@@ -130,11 +130,14 @@ def showPrediction(test_images):
 
         predicted_image = ndimage.binary_dilation(predicted_image, iterations=5)
 
-        #MaxPooking
+        #MaxPooling
         predicted_image*(predicted_image == ndimage.filters.maximum_filter(predicted_image, footprint=np.ones((3,3))))#median_filter
         predicted_image = np.where((predicted_image > 0.8), 1.0, 0.5)
 
-        imageExtraction(test_image, predicted_image, i)
+        try:
+            imageExtraction(test_image, predicted_image, i)
+        except:
+            print("Error", i)
 
         # convert float to uint8
         test_image_uint8 = (test_image*255).astype('uint8')
