@@ -106,3 +106,7 @@ def prepareData(files, saveFile_path):
 
 print("#Create tfrecords")
 prepareData(files, "train.tfrecords")
+
+#python3 object_detection/model_main_tf2.py --model_dir=training/mobilnet/ --pipeline_config_path=training/ssd_mobilenet_v2_320x320_coco17_tpu-8/pipeline.config
+#tensorboard --logdir='mobilnet/train' --bind_all
+#python3 object_detection/exporter_main_v2.py --input_type image_tensor --pipeline_config_path training/ssd_mobilenet_v2_320x320_coco17_tpu-8/pipeline.config --trained_checkpoint_dir training/mobilnet/ --output_directory training/export/
