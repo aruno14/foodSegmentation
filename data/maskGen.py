@@ -40,8 +40,11 @@ for file_name in file_bbs:
                 color = (255)
             elif type == "verre":
                 color = (200)
-            else:
+            elif type == "pain":
                 color = (100)
+            else:
+                print("UNKNOW", filename, type)
+                continue
             cv2.fillPoly(mask, [arr], color=color)
         except:
             print("Not found:", file_name)

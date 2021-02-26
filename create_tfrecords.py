@@ -4,11 +4,12 @@ import numpy as np
 import io
 
 import tensorflow as tf
+from object_detection.utils import dataset_util, label_map_util
 
 from PIL import Image, ImageDraw
 import csv
 
-IMG_HEIGHT, IMG_WIDTH=128, 128
+IMG_HEIGHT, IMG_WIDTH=512, 512#128, 128
 CLASSES_COUNT = 3
 
 files = {}
@@ -26,7 +27,11 @@ with open('data/food_box.csv') as csv_file:
         labelname = labelname.encode('utf-8')
         xmin, ymin, xmax, ymax = float(row[2]), float(row[3]), float(row[4]), float(row[5])
         if filename not in files:
-            files[filename] = {'xmins':[], 'xmaxs':[], 'ymins':[], 'ymaxs':[], 'classes_text':[], 'classes':[]}
+            files[filename] = {'xmins':[], 'xmaxs':[], 'ymins':[], 'ymaxs':[], 'classes_text':[], 'classes':[], 'hash':[]}
+        boxHash = str(xmin) + str(ymin) + str(xmax) + str(ymax) + str(label)
+        if boxHash in files[filename]['hash']:
+            continue
+        files[filename]['hash'].append(boxHash)
         files[filename]['xmins'].append(xmin)
         files[filename]['ymins'].append(ymin)
         files[filename]['xmaxs'].append(xmax)
@@ -48,12 +53,25 @@ def create_tf_example(filename, xmins, ymins, xmaxs, ymaxs, classes_text, classe
     encoded_jpg_io = io.BytesIO(encoded_jpg)
     image = Image.open(encoded_jpg_io)
     width, height = image.size
-    print(file_path, width, height)
-
+    
     filename = filename.encode('utf-8')
+    
+    print(file_path, filename, width, height, classes_text, classes)
     image_format = b'jpg'
 
     tf_example = tf.train.Example(features=tf.train.Features(feature={
+        #'image/height': dataset_util.int64_feature(height),
+        #'image/width': dataset_util.int64_feature(width),
+        #'image/filename': dataset_util.bytes_feature(filename),
+        #'image/source_id': dataset_util.bytes_feature(filename),
+        #'image/encoded': dataset_util.bytes_feature(encoded_jpg),
+        #'image/format': dataset_util.bytes_feature(image_format),
+        #'image/object/bbox/xmin': dataset_util.float_list_feature(xmins),
+        #'image/object/bbox/xmax': dataset_util.float_list_feature(xmaxs),
+        #'image/object/bbox/ymin': dataset_util.float_list_feature(ymins),
+        #'image/object/bbox/ymax': dataset_util.float_list_feature(ymaxs),
+        #'image/object/class/text': dataset_util.bytes_list_feature(classes_text),
+        #'image/object/class/label': dataset_util.int64_list_feature(classes),
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=[height])),
         'image/width': tf.train.Feature(int64_list=tf.train.Int64List(value=[width])),
         'image/filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[filename])),
@@ -83,6 +101,7 @@ def prepareData(files, saveFile_path):
         tf_example = create_tf_example(filename, xmins, ymins, xmaxs, ymaxs, classes_text, classes)
         writer.write(tf_example.SerializeToString())
         count+=1
+        #break
     writer.close()
 
 print("#Create tfrecords")
