@@ -4,16 +4,27 @@ import numpy as np
 import io
 
 import tensorflow as tf
-from object_detection.utils import dataset_util, label_map_util
 
 from PIL import Image, ImageDraw
 import csv
+import argparse
+
+parser = argparse.ArgumentParser(description='Generate mask')
+parser.add_argument('--input', default="data/food_box.csv",help='CSV filepath')
+parser.add_argument('--images', default="data/images/",help='Image folder')
+parser.add_argument('--output', default="train.tfrecords",help='Output file')
+
+args = parser.parse_args()
+
+input_filepath = args.input
+output_filepath = args.output
+images_folder = args.images
 
 IMG_HEIGHT, IMG_WIDTH=512, 512#128, 128
 CLASSES_COUNT = 3
 
 files = {}
-with open('data/food_box.csv') as csv_file:
+with open(input_filepath) as csv_file:
     csv_reader = csv.reader(csv_file, delimiter=',')
     for row in csv_reader:
         filename = row[0]
@@ -47,31 +58,19 @@ def process_img(file_path:str, channels=3):
     return img
 
 def create_tf_example(filename, xmins, ymins, xmaxs, ymaxs, classes_text, classes):
-    file_path = "data/images/"+filename
+    file_path = images_folder+filename
     fin = open(file_path, 'rb')
     encoded_jpg = fin.read()
     encoded_jpg_io = io.BytesIO(encoded_jpg)
     image = Image.open(encoded_jpg_io)
     width, height = image.size
-    
+
     filename = filename.encode('utf-8')
-    
+
     print(file_path, filename, width, height, classes_text, classes)
     image_format = b'jpg'
 
     tf_example = tf.train.Example(features=tf.train.Features(feature={
-        #'image/height': dataset_util.int64_feature(height),
-        #'image/width': dataset_util.int64_feature(width),
-        #'image/filename': dataset_util.bytes_feature(filename),
-        #'image/source_id': dataset_util.bytes_feature(filename),
-        #'image/encoded': dataset_util.bytes_feature(encoded_jpg),
-        #'image/format': dataset_util.bytes_feature(image_format),
-        #'image/object/bbox/xmin': dataset_util.float_list_feature(xmins),
-        #'image/object/bbox/xmax': dataset_util.float_list_feature(xmaxs),
-        #'image/object/bbox/ymin': dataset_util.float_list_feature(ymins),
-        #'image/object/bbox/ymax': dataset_util.float_list_feature(ymaxs),
-        #'image/object/class/text': dataset_util.bytes_list_feature(classes_text),
-        #'image/object/class/label': dataset_util.int64_list_feature(classes),
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=[height])),
         'image/width': tf.train.Feature(int64_list=tf.train.Int64List(value=[width])),
         'image/filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[filename])),
@@ -104,8 +103,8 @@ def prepareData(files, saveFile_path):
         #break
     writer.close()
 
-print("#Create tfrecords")
-prepareData(files, "train.tfrecords")
+print("#Create tfrecords", output_filepath)
+prepareData(files, output_filepath)
 
 #python3 object_detection/model_main_tf2.py --model_dir=training/mobilnet/ --pipeline_config_path=training/ssd_mobilenet_v2_320x320_coco17_tpu-8/pipeline.config
 #tensorboard --logdir='mobilnet/train' --bind_all

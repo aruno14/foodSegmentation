@@ -2,12 +2,24 @@ import os
 import cv2
 import json
 import numpy as np
+import argparse
 
-source_folder = os.path.join(os.getcwd(), "images")
-mask_folder = os.path.join(os.getcwd(), "masks")
+parser = argparse.ArgumentParser(description='Generate mask')
+parser.add_argument('--file', default="food_json.json",help='Json filepath')
+parser.add_argument('--folder', default="images",help='Image folder path')
+parser.add_argument('--mask', default="masks",help='Mask folder path')
+
+args = parser.parse_args()
+
+image_folder = args.folder
+mask_folder = args.mask
+json_path = args.file
+
+source_folder = os.path.join(os.getcwd(), image_folder)
+mask_folder = os.path.join(os.getcwd(), mask_folder)
 if not os.path.exists(mask_folder):
     os.mkdir(mask_folder)
-json_path = "food_json.json"
+
 count = 0
 file_bbs = {}
 
