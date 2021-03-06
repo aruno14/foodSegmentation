@@ -3,12 +3,15 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageDraw
 import datetime
+import csv
 
 import image_similarity_measures
 from image_similarity_measures.quality_metrics import rmse, psnr, fsim
 
 PATH_TO_MODEL_DIR = 'detection_model'
 detect_fn = tf.saved_model.load(PATH_TO_MODEL_DIR)
+crop_margin = 10
+similarity_trigger = 0.4
 
 def image_distance(image1, image2):
     return fsim(image1, image2)
@@ -27,34 +30,49 @@ def imageDetect(image_np, previousImages):
     img = Image.fromarray(image_np)
     draw = ImageDraw.Draw(img)
     newImages = []
+    labelCount = {0:0, 1:0, 2:0}
+    filesName = []
     for i, box in enumerate(detections['detection_boxes']):
         score = detections['detection_scores'][i]
         classe = detections['detection_classes'][i]
-        if score > 0.6 and box[3] - box[1] < 0.8 and box[2] - box[1] < 0.8:
+        if score > 0.6 and box[3] - box[1] < 0.8 and box[2] - box[1] < 0.8 and box[3] - box[1] > 0.1 and box[2] - box[1] > 0.1:
+            labelCount[classe]+=1
+
             x1 = box[1] * img.size[0]
             y1 = box[0] * img.size[1]
             x2 = box[3] * img.size[0]
             y2 = box[2] * img.size[1]
 
             #print('box', x1, y1, x2, y2)
-            crop = img.crop((x1, y1, x2, y2))
+
+            crop = img.crop((max(x1-crop_margin, 0), max(y1-crop_margin, 0), min(x2+crop_margin, img.size[0]), min(y2+crop_margin, img.size[1])))
             cropNp = np.array(crop)
             cropNpCrop = cv2.resize(cropNp, (64, 64))
-            newImages.append(cropNpCrop)
-            
+
             maxSimilarity = 0
-            for image in previousImages:
+            maxImage = ()
+            for path, image, scorePre in previousImages:
                 similarity = image_distance(image, cropNpCrop)
-                maxSimilarity = max(similarity, maxSimilarity)
+                if similarity > maxSimilarity:
+                    maxSimilarity = similarity
+                    maxImage = (path, image, scorePre)
                 #print('similarity', similarity)
 
-            filename = "{}_{}-{}-{}_{}-{}-{}-{}_{}_{}.jpg".format(now.timestamp(), now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond, i, classe)
-            if maxSimilarity < 0.4:
+            if maxSimilarity < similarity_trigger:
+                filename = "{}_{}-{}-{}_{}-{}-{}-{}_{}_{}.jpg".format(now.timestamp(), now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond, i, classe)
                 print('save', filename)
+                filesName.append(filename)
                 crop.save(filename)
+                newImages.append((filename, cropNpCrop, score))
+            else:
+                newImages.append(maxImage)
+                filesName.append(maxImage[0])
 
             draw.rectangle((x1, y1, x2, y2), outline=(0, 255, 0))
 
+    with open("video_log.csv", "a+") as csv_file:
+        writer = csv.writer(csv_file, delimiter=',')
+        writer.writerow([now.timestamp(), now.isoformat(), labelCount[0], labelCount[1], labelCount[2], str([x for x, y, z in newImages]), str([z for x, y, z in newImages])])
     return np.array(img), newImages
 
 video = cv2.VideoCapture('example/assiettes.mp4')
@@ -74,17 +92,12 @@ while True:
     #print("====New frame", frameCount)
     frame = cv2.resize(frame, SIZE)
     previousFrame = frame
-    
-
     inWriter.write(frame)
 
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame = frame.astype(np.uint8)
-    predicted_image, previousImageTmp = imageDetect(frame, previousImage)
-    
-    if len(previousImageTmp) > 0:
-        previousImage = previousImageTmp
-    
+    predicted_image, previousImage = imageDetect(frame, previousImage)
+
     predicted_image = cv2.cvtColor(predicted_image, cv2.COLOR_RGB2BGR)
     outWriter.write(predicted_image)
 
