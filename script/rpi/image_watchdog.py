@@ -106,9 +106,9 @@ def detect_bbox_from_image_path(image_path):
     img.save(dest_path_raw)
     box_img.save(dest_path_box)
     crop_img.save(dest_path_crop)
-    os.system('/home/pi/foodSegmentation/script/rpi_send.sh ' + dest_path_raw)
-    os.system('/home/pi/foodSegmentation/script/rpi_send.sh ' + dest_path_box)
-    os.system('/home/pi/foodSegmentation/script/rpi_send.sh ' + dest_path_crop)
+    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_raw)
+    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_box)
+    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_crop)
     # end of debugging only
 
     if box_score_max == 0.0:
@@ -123,8 +123,8 @@ def detect_bbox_from_image_path(image_path):
         print(box_score_max, file=f)
 
     # send
-    os.system('/home/pi/foodSegmentation/script/rpi_send.sh ' + dest_path_out_crop)
-    os.system('/home/pi/foodSegmentation/script/rpi_send.sh ' + dest_path_out_txt)
+    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_out_crop)
+    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_out_txt)
 
     # delete files
     #os.remove(image_path)
