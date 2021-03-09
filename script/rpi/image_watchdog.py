@@ -14,11 +14,15 @@
 
 import os
 import sys
+import csv
 import time
+import datetime
 import numpy as np
 import tensorflow as tf
 
 from PIL import Image, ImageDraw
+import image_similarity_measures
+from image_similarity_measures.quality_metrics import rmse, psnr, fsim
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -26,18 +30,16 @@ from watchdog.events import FileSystemEventHandler
 ### Settings
 SCRIPT_PATH = os.path.dirname(os.path.realpath(sys.argv[0]))
 PATH_TO_MODEL_DIR = SCRIPT_PATH + '/detection_model/'
-BOX_DRAW_THRESHOLD = 0.2
+BOX_DRAW_THRESHOLD = 0.5
 LISTENING_PATH = sys.argv[1]
-OUTPUT_PATH = '/tmp/foodSeg/'
-# Average size of the (square) box in pixel, e.g. 350x350
-BOX_SIZE_AVG = 350
-# Maximum difference in pixel relative to the average size
-# (for a box to be considered valid)
-BOX_SIZE_DIFF_MAX = 100
-### End of settings
+OUTPUT_PATH = '/tmp/foodSeg/' #'output'
 
-BOX_SIZE_MIN = BOX_SIZE_AVG - BOX_SIZE_DIFF_MAX
-BOX_SIZE_MAX = BOX_SIZE_AVG + BOX_SIZE_DIFF_MAX
+BOX_SIZE_MIN = 0.1
+BOX_SIZE_MAX = 0.8
+BOX_MARGIN = 10
+
+SIMILARITY_TRIGGER = 0.4
+### End of settings
 
 print('Image box watchdog, running from {}'.format(SCRIPT_PATH), flush=True)
 
@@ -45,13 +47,18 @@ print('Loading model from "{}"...'.format(PATH_TO_MODEL_DIR), flush=True)
 detect_fn = tf.saved_model.load(PATH_TO_MODEL_DIR)
 print('Model loaded', flush=True)
 
+images_history = []
+
 def detect_bbox_from_image_path(image_path):
+    global images_history
     print('Running inference for "{}"...'.format(image_path))
 
     image_ext = os.path.splitext(image_path)[1]
     if image_ext != '.jpg':
         print('Skip non JPEG file', flush=True)
         return
+
+    now = datetime.datetime.now()
 
     # load image into numpy array
     image_np = np.array(Image.open(image_path))
@@ -69,15 +76,22 @@ def detect_bbox_from_image_path(image_path):
     img = Image.fromarray(image_np_with_detections)
 
     # crop and draw each detection box
-    box_score_max = 0.0
-    crop_img = img.copy()
     box_img = img.copy()
     draw = ImageDraw.Draw(box_img)
+    cropedImages = []
+    labelCount = {0:0, 1:0, 2:0, 3:0}
     for i, box in enumerate(detections['detection_boxes']):
         score = detections['detection_scores'][i]
         classe = detections['detection_classes'][i]
         if score > BOX_DRAW_THRESHOLD:
+            width = box[3] - box[1]
+            height = box[2] - box[0]
+            if not (width < BOX_SIZE_MAX and height < BOX_SIZE_MAX and width > BOX_SIZE_MIN and height > BOX_SIZE_MIN):
+                print('Skip box (invalid size)', width, height)
+                continue
             print(i, box, classe, score)
+            labelCount[classe]+=1
+
             x1 = int(box[1] * img.size[0])
             y1 = int(box[0] * img.size[1])
             x2 = int(box[3] * img.size[0])
@@ -85,46 +99,48 @@ def detect_bbox_from_image_path(image_path):
             x_len = x2 - x1
             y_len = y2 - y1
             print('box {}x{} from ({}, {}) to ({}, {})'.format(x_len, y_len, x1, y1, x2, y2))
-            draw.rectangle((x1, y1, x2, y2), outline=(0, 255, 0))
+            draw.rectangle((max(x1-BOX_MARGIN, 0), max(y1-BOX_MARGIN, 0), min(x2+BOX_MARGIN, x2*img.size[0]), min(y2+BOX_MARGIN, y2*img.size[1])), outline=(0, 255, 0))
 
-            if (classe == 1) and (score > box_score_max):
-                if ( x_len > BOX_SIZE_MIN ) and \
-                   ( x_len < BOX_SIZE_MAX ) and \
-                   ( y_len > BOX_SIZE_MIN ) and \
-                   ( y_len < BOX_SIZE_MAX ):
-                    crop_img = img.crop((x1, y1, x2, y2))
-                    box_score_max = score
-                    print('Max score:', box_score_max)
-                else:
-	                print('Skip box (invalid size)')
+            filename = "{}_{}-{}-{}_{}-{}-{}-{}_{}_{}.jpg".format(now.timestamp(), now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond, i, classe)
+
+            crop_img = img.crop((max(x1-BOX_MARGIN, 0), max(y1-BOX_MARGIN, 0), min(x2+BOX_MARGIN, x2*img.size[0]), min(y2+BOX_MARGIN, y2*img.size[1])))
+            dest_path_crop = "{}/{}".format(OUTPUT_PATH, filename)
+            cropedImages.append((filename, crop_img, score))
+
+            crop_img_resize = crop_img.resize((128, 128))
+
+            for date, image in images_history:
+                similarity = fsim(np.asarray(image), np.asarray(crop_img_resize))
+                if similarity > SIMILARITY_TRIGGER:
+                    print('Similar to previous images')
+                    return
+
+            crop_img.save(dest_path_crop)
+            images_history.append((now, crop_img_resize))
+
+            os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_crop)
 
     # for debugging only
-    image_basename = os.path.basename(image_path)
-    dest_path_raw  = "{}/raw.jpg".format(OUTPUT_PATH)
-    dest_path_box  = "{}/box.jpg".format(OUTPUT_PATH)
-    dest_path_crop = "{}/crop.jpg".format(OUTPUT_PATH)
+    dest_path_raw  = "{}/{}-raw.jpg".format(OUTPUT_PATH, now.timestamp())
+    dest_path_box  = "{}/{}-box.jpg".format(OUTPUT_PATH, now.timestamp())
     img.save(dest_path_raw)
     box_img.save(dest_path_box)
-    crop_img.save(dest_path_crop)
     os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_raw)
     os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_box)
-    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_crop)
     # end of debugging only
 
-    if box_score_max == 0.0:
+    if len(cropedImages) == 0:
         print('Nothing found, skipping file upload...', flush=True)
         return
 
-    # save output with timestamp
-    dest_path_out_crop = "{}/{}".format(OUTPUT_PATH, image_basename)
-    dest_path_out_txt  = "{}/{}.txt".format(OUTPUT_PATH, image_basename)
-    crop_img.save(dest_path_out_crop)
-    with open(dest_path_out_txt, 'w') as f:
-        print(box_score_max, file=f)
+    dest_path_out_csv  = "{}/inference_log.csv".format(OUTPUT_PATH)
+
+    with open(dest_path_out_csv, "a+") as csv_file:
+        writer = csv.writer(csv_file, delimiter=',')
+        writer.writerow([now.timestamp(), now.isoformat(), labelCount[0], labelCount[1], labelCount[2], str([x for x, y, z in cropedImages]), str([y for x, y, z in cropedImages]), str([z for x, y, z in cropedImages])])
 
     # send
-    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_out_crop)
-    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_out_txt)
+    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_out_csv)
 
     # delete files
     #os.remove(image_path)
@@ -132,10 +148,6 @@ def detect_bbox_from_image_path(image_path):
     print('End of inference', flush=True)
 
 class CustomEventHandler(FileSystemEventHandler):
-#    def on_created(self, event):
-#        path = event.src_path
-#        print('File creation event from "{}"'.format(path))
-#        detect_bbox_from_image_path(path)
     def on_moved(self, event):
         #path = event.src_path
         path = event.dest_path
