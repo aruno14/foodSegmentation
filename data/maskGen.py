@@ -40,7 +40,7 @@ for file_name in file_bbs:
     print(file_name)
     for shape in file_bbs[file_name]:
         try:
-            type = shape['region_attributes']['categorie']
+            type = shape['region_attributes']['categorie'].replace("\n", "")
             x_points = shape["shape_attributes"]["all_points_x"]
             y_points = shape["shape_attributes"]["all_points_y"]
 

@@ -23,6 +23,7 @@ boxes_folder = os.path.join(os.getcwd(), box_folder)
 if not os.path.exists(boxes_folder):
     os.mkdir(boxes_folder)
 count = 0
+countLabel = {}
 file_bbs = {}
 
 with open(json_path) as f:
@@ -39,9 +40,12 @@ with open(output_path, mode='w') as boxFile:
     boxFile_writer = csv.writer(boxFile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     for file_name in file_bbs:
         original_image = cv2.imread(os.path.join(source_folder, file_name))
-        print(original_image.shape[0], original_image.shape[1])
+        print(file_name, original_image.shape[0], original_image.shape[1])
         for shape in file_bbs[file_name]:
-            type = shape['region_attributes']['categorie']
+            type = shape['region_attributes']['categorie'].replace("\n", "")
+            if type not in countLabel:
+                countLabel[type] = 0
+            countLabel[type]+=1
             x_points = shape["shape_attributes"]["all_points_x"]
             y_points = shape["shape_attributes"]["all_points_y"]
             x_min, x_max = np.min(x_points)/original_image.shape[1], np.max(x_points)/original_image.shape[1]
@@ -53,4 +57,4 @@ with open(output_path, mode='w') as boxFile:
         cv2.imwrite(os.path.join(boxes_folder, file_name), original_image)
         count+=1
 
-print("Box saved:", count)
+print("Box saved:", count, countLabel)

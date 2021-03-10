@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from scipy import ndimage
 
-video = cv2.VideoCapture('189933.t.mp4')
+video = cv2.VideoCapture('example/assiettes.mp4')
 SIZE = (128, 128)
 
 model_name = "traySegModel"

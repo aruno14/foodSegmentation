@@ -32,10 +32,11 @@ def imageDetect(image_np, previousImages):
     newImages = []
     labelCount = {0:0, 1:0, 2:0}
     filesName = []
+    isNew = False
     for i, box in enumerate(detections['detection_boxes']):
         score = detections['detection_scores'][i]
         classe = detections['detection_classes'][i]
-        if score > 0.6 and box[3] - box[1] < 0.8 and box[2] - box[1] < 0.8 and box[3] - box[1] > 0.1 and box[2] - box[1] > 0.1:
+        if score > 0.6 and box[3] - box[1] < 0.8 and box[2] - box[0] < 0.8 and box[3] - box[1] > 0.1 and box[2] - box[0] > 0.1:
             labelCount[classe]+=1
 
             x1 = box[1] * img.size[0]
@@ -64,15 +65,15 @@ def imageDetect(image_np, previousImages):
                 filesName.append(filename)
                 crop.save(filename)
                 newImages.append((filename, cropNpCrop, score))
+                isNew = True
             else:
                 newImages.append(maxImage)
                 filesName.append(maxImage[0])
 
             draw.rectangle((x1, y1, x2, y2), outline=(0, 255, 0))
-
     with open("video_log.csv", "a+") as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
-        writer.writerow([now.timestamp(), now.isoformat(), labelCount[0], labelCount[1], labelCount[2], str([x for x, y, z in newImages]), str([z for x, y, z in newImages])])
+        writer.writerow([now.timestamp(), now.isoformat(), isNew, labelCount[0], labelCount[1], labelCount[2], str([x for x, y, z in newImages]), str([z for x, y, z in newImages])])
     return np.array(img), newImages
 
 video = cv2.VideoCapture('example/assiettes.mp4')
