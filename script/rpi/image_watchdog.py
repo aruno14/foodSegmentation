@@ -32,7 +32,7 @@ SCRIPT_PATH = os.path.dirname(os.path.realpath(sys.argv[0]))
 PATH_TO_MODEL_DIR = SCRIPT_PATH + '/detection_model/'
 BOX_DRAW_THRESHOLD = 0.5
 LISTENING_PATH = sys.argv[1]
-OUTPUT_PATH = '/tmp/foodSeg/' #'output'
+OUTPUT_PATH = '/tmp/foodSeg/' #'output'　'/tmp/foodSeg/'
 
 BOX_SIZE_MIN = 0.1
 BOX_SIZE_MAX = 0.8
@@ -48,6 +48,11 @@ detect_fn = tf.saved_model.load(PATH_TO_MODEL_DIR)
 print('Model loaded', flush=True)
 
 images_history = []
+
+def addToHistory(image):
+    images_history.append(image)
+    if len(images_history) > 10:
+        images_history.pop()
 
 def detect_bbox_from_image_path(image_path):
     global images_history
@@ -87,7 +92,7 @@ def detect_bbox_from_image_path(image_path):
             width = box[3] - box[1]
             height = box[2] - box[0]
             if not (width < BOX_SIZE_MAX and height < BOX_SIZE_MAX and width > BOX_SIZE_MIN and height > BOX_SIZE_MIN):
-                print('Skip box (invalid size)', width, height)
+                print('Skip box (invalid size)', width, height, flush=True)
                 continue
             print(i, box, classe, score)
             labelCount[classe]+=1
@@ -104,19 +109,23 @@ def detect_bbox_from_image_path(image_path):
             filename = "{}_{}-{}-{}_{}-{}-{}-{}_{}_{}.jpg".format(now.timestamp(), now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond, i, classe)
 
             crop_img = img.crop((max(x1-BOX_MARGIN, 0), max(y1-BOX_MARGIN, 0), min(x2+BOX_MARGIN, x2*img.size[0]), min(y2+BOX_MARGIN, y2*img.size[1])))
-            dest_path_crop = "{}/{}".format(OUTPUT_PATH, filename)
-            cropedImages.append((filename, crop_img, score))
-
             crop_img_resize = crop_img.resize((128, 128))
 
+            hasSimilar = False
             for date, image in images_history:
                 similarity = fsim(np.asarray(image), np.asarray(crop_img_resize))
                 if similarity > SIMILARITY_TRIGGER:
-                    print('Similar to previous images')
-                    return
+                    print('Similar to previous images', similarity, flush=True)
+                    hasSimilar = True
+                    break
+            if hasSimilar:
+                continue
+
+            dest_path_crop = "{}/{}".format(OUTPUT_PATH, filename)
+            cropedImages.append((filename, crop_img, score))
 
             crop_img.save(dest_path_crop)
-            images_history.append((now, crop_img_resize))
+            addToHistory((now, crop_img_resize))
 
             os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_crop)
 
