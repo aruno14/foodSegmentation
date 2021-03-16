@@ -58,18 +58,25 @@ def detect_bbox_from_image_path(image_path):
     global images_history
     print('Running inference for "{}"...'.format(image_path))
 
-    image_ext = os.path.splitext(image_path)[1]
+    image_filename = os.path.basename(image_path)
+    image_name = os.path.splitext(image_filename)[0]
+    image_ext = os.path.splitext(image_filename)[1]
+    # image_name is expected to be a timestamp
+    image_timestamp = datetime.datetime.fromtimestamp(int(image_name))
+    # TODO: fallback to datetime.now if filename is not timestamp
+    image_timestamp_str = str(int(image_timestamp.timestamp()))
     if image_ext != '.jpg':
         print('Skip non JPEG file', flush=True)
         return
-
-    now = datetime.datetime.now()
 
     # load image into numpy array
     image_np = np.array(Image.open(image_path))
     input_tensor = tf.convert_to_tensor(image_np)
     input_tensor = input_tensor[tf.newaxis, ...]
     detections = detect_fn(input_tensor)
+
+    # delete image files
+    os.remove(image_path)
 
     # process results
     num_detections = int(detections.pop('num_detections'))
@@ -106,8 +113,7 @@ def detect_bbox_from_image_path(image_path):
             print('box {}x{} from ({}, {}) to ({}, {})'.format(x_len, y_len, x1, y1, x2, y2))
             draw.rectangle((max(x1-BOX_MARGIN, 0), max(y1-BOX_MARGIN, 0), min(x2+BOX_MARGIN, x2*img.size[0]), min(y2+BOX_MARGIN, y2*img.size[1])), outline=(0, 255, 0))
 
-            filename = "{}_{}-{}-{}_{}-{}-{}-{}_{}_{}.jpg".format(now.timestamp(), now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond, i, classe)
-
+            crop_filename = "{}_{}-{}.jpg".format(image_timestamp_str, i, classe)
             crop_img = img.crop((max(x1-BOX_MARGIN, 0), max(y1-BOX_MARGIN, 0), min(x2+BOX_MARGIN, x2*img.size[0]), min(y2+BOX_MARGIN, y2*img.size[1])))
             crop_img_resize = crop_img.resize((128, 128))
 
@@ -121,38 +127,43 @@ def detect_bbox_from_image_path(image_path):
             if hasSimilar:
                 continue
 
-            dest_path_crop = "{}/{}".format(OUTPUT_PATH, filename)
-            cropedImages.append((filename, crop_img, score))
+            dest_path_crop = "{}/{}".format(OUTPUT_PATH, crop_filename)
+            cropedImages.append((crop_filename, crop_img, score))
 
             crop_img.save(dest_path_crop)
-            addToHistory((now, crop_img_resize))
+            addToHistory((image_timestamp, crop_img_resize))
 
             os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_crop)
+            os.remove(dest_path_crop)
 
     # for debugging only
-    dest_path_raw  = "{}/{}-raw.jpg".format(OUTPUT_PATH, now.timestamp())
-    dest_path_box  = "{}/{}-box.jpg".format(OUTPUT_PATH, now.timestamp())
-    img.save(dest_path_raw)
-    box_img.save(dest_path_box)
-    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_raw)
-    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_box)
+#    dest_path_raw  = "{}/{}-raw.jpg".format(OUTPUT_PATH, image_timestamp_str)
+#    dest_path_box  = "{}/{}-box.jpg".format(OUTPUT_PATH, image_timestamp_str)
+#    img.save(dest_path_raw)
+#    box_img.save(dest_path_box)
+#    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_raw)
+#    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_box)
     # end of debugging only
 
     if len(cropedImages) == 0:
-        print('Nothing found, skipping file upload...', flush=True)
+        print('Nothing found, nothing was uploaded...', flush=True)
         return
 
-    dest_path_out_csv  = "{}/inference_log.csv".format(OUTPUT_PATH)
+    dest_path_out_csv  = "{}/{}.csv".format(OUTPUT_PATH, image_timestamp_str)
 
     with open(dest_path_out_csv, "a+") as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
-        writer.writerow([now.timestamp(), now.isoformat(), labelCount[0], labelCount[1], labelCount[2], str([x for x, y, z in cropedImages]), str([y for x, y, z in cropedImages]), str([z for x, y, z in cropedImages])])
+        writer.writerow(
+            [image_timestamp_str, image_timestamp.isoformat(),
+            labelCount[0], labelCount[1], labelCount[2],
+            str([x for x, y, z in cropedImages]),
+            str([y for x, y, z in cropedImages]),
+            str([z for x, y, z in cropedImages])]
+        )
 
     # send
     os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_out_csv)
-
-    # delete files
-    #os.remove(image_path)
+    os.remove(dest_path_out_csv)
 
     print('End of inference', flush=True)
 
