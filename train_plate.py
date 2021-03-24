@@ -10,7 +10,7 @@ image_size = (128, 128)
 batch_size = 16
 batch_size_val = 8
 epochs = 15
-model_name = "model_plate"
+model_name = "plate_model"
 
 datagen = ImageDataGenerator(rescale=1./255, horizontal_flip=True, validation_split=0.3)
 
@@ -32,28 +32,28 @@ validation_generator = datagen.flow_from_directory(
     batch_size=batch_size_val,
     class_mode='categorical')
 
-
 if os.path.exists(model_name):
     print("Load: " + model_name)
     classifier = load_model(model_name)
 else:
-    classifier = Sequential()
-    classifier.add(Conv2D(64, (3, 3), padding='same', activation='relu', input_shape= image_size+(3,)))
-    classifier.add(MaxPooling2D(pool_size=(2, 2)))
-    classifier.add(Conv2D(64, (3, 3), activation='relu'))
-    classifier.add(Dropout(0.4))
-    classifier.add(MaxPooling2D(pool_size=(2, 2)))
-    classifier.add(Conv2D(128, (3, 3), activation='relu'))
-    classifier.add(Dropout(0.4))
-    classifier.add(MaxPooling2D(pool_size=(2, 2)))
+    in1 = Input(shape=(128, 128)+ (3,))
+    x = Conv2D(64, (3, 3), padding='same', activation='relu', input_shape= image_size+(3,))(in1)
+    x = MaxPooling2D(pool_size=(2, 2))(x)
+    x = Conv2D(64, (3, 3), activation='relu')(x)
+    x = Dropout(0.4)(x)
+    x = MaxPooling2D(pool_size=(2, 2))(x)
+    #x = Conv2D(128, (3, 3), activation='relu')(x)
+    #x = Dropout(0.4)(x)
+    #x = MaxPooling2D(pool_size=(2, 2))(x)
 
-    classifier.add(Flatten())
-    classifier.add(Dense(64))
-    classifier.add(Activation('relu'))
-    classifier.add(Dropout(0.2))
-    classifier.add(Dense(2))
-    classifier.add(Activation('sigmoid'))
+    features = Flatten()(x)
+    x = Dense(64, activation='relu')(features)
+    x = Dropout(0.2)(x)
+    x = Dense(2, activation='sigmoid')(x)
+    classifier = Model(inputs=[in1], outputs=[x])
+
     classifier.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    classifier.summary()
 
 classifier.fit(train_generator, steps_per_epoch=train_generator.samples//batch_size, epochs=epochs, validation_data=validation_generator, validation_steps=validation_generator.samples//batch_size_val)
 classifier.save(model_name)
