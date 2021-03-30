@@ -1,13 +1,10 @@
-import os
+import argparse
+import io
+from PIL import Image
 from glob import glob
 import numpy as np
-import io
-
 import tensorflow as tf
-
-from PIL import Image, ImageDraw
 import csv
-import argparse
 
 parser = argparse.ArgumentParser(description='Generate mask')
 parser.add_argument('--input', default="data/food_box.csv",help='CSV filepath')
@@ -49,13 +46,6 @@ with open(input_filepath) as csv_file:
         files[filename]['ymaxs'].append(ymax)
         files[filename]['classes_text'].append(labelname)
         files[filename]['classes'].append(label)
-
-def process_img(file_path:str, channels=3):
-    img = tf.io.read_file(file_path)
-    img = tf.image.decode_jpeg(img, channels=channels)
-    img = tf.image.convert_image_dtype(img, tf.float32)#0~1
-    img = tf.image.resize(img, size=(IMG_HEIGHT, IMG_WIDTH))
-    return img
 
 def create_tf_example(filename, xmins, ymins, xmaxs, ymaxs, classes_text, classes):
     file_path = images_folder+filename
@@ -100,11 +90,12 @@ def prepareData(files, saveFile_path):
         tf_example = create_tf_example(filename, xmins, ymins, xmaxs, ymaxs, classes_text, classes)
         writer.write(tf_example.SerializeToString())
         count+=1
-        #break
     writer.close()
+    return count
 
 print("#Create tfrecords", output_filepath)
-prepareData(files, output_filepath)
+count = prepareData(files, output_filepath)
+print("Image count", count)
 
 #python3 object_detection/model_main_tf2.py --model_dir=training/mobilnet/ --pipeline_config_path=training/ssd_mobilenet_v2_320x320_coco17_tpu-8/pipeline.config
 #tensorboard --logdir='mobilnet/train' --bind_all
