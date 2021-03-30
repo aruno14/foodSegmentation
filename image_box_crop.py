@@ -38,7 +38,6 @@ def applyMask(crop_img):
     output_image = crop_img * np.expand_dims(mask, axis=-1)
     return output_image
 
-
 def load_image_into_numpy_array(path):
    return np.array(Image.open(path))
 
@@ -80,7 +79,9 @@ for idx, image_path in enumerate(["example/input-01.png", "data/images/DSC_0014.
             crop_img = img.crop((max(x1-BOX_MARGIN, 0), max(y1-BOX_MARGIN, 0), min(x2+BOX_MARGIN, x2*img.size[0]), min(y2+BOX_MARGIN, y2*img.size[1])))
             crop_img.save("output-object-{}-{}.jpg".format(idx, i))
             crop_img_resized = crop_img.resize(SIZE)
+
             masked_img_np = applyMask(crop_img)
             masked_img = Image.fromarray(masked_img_np.astype('uint8'))
             masked_img.save("output-object-mask-{}-{}.jpg".format(idx, i))
+
     imgBox.save("output-{}-box.jpg".format(idx))
