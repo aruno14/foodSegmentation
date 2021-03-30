@@ -5,16 +5,15 @@ from PIL import Image, ImageDraw
 import datetime
 import csv
 
-import image_similarity_measures
-from image_similarity_measures.quality_metrics import rmse, psnr, fsim
-
 PATH_TO_MODEL_DIR = 'detection_model'
+PATH_TO_MODEL_FEATURES_DIR = 'plate_model_features.h5'
 detect_fn = tf.saved_model.load(PATH_TO_MODEL_DIR)
+features_model = tf.keras.models.load_model(PATH_TO_MODEL_FEATURES_DIR)
 crop_margin = 10
-similarity_trigger = 0.4
+similarity_trigger = 8
 
-def image_distance(image1, image2):
-    return fsim(image1, image2)
+def image_similarity(features1, features2):
+    return np.sqrt(np.sum((features1 - features2) ** 2))
 
 def imageDetect(image_np, previousImages):
     now = datetime.datetime.now()
@@ -30,8 +29,7 @@ def imageDetect(image_np, previousImages):
     img = Image.fromarray(image_np)
     draw = ImageDraw.Draw(img)
     newImages = []
-    labelCount = {0:0, 1:0, 2:0}
-    filesName = []
+    labelCount = {0:0, 1:0, 2:0, 3:0}
     isNew = False
     for i, box in enumerate(detections['detection_boxes']):
         score = detections['detection_scores'][i]
@@ -48,32 +46,34 @@ def imageDetect(image_np, previousImages):
 
             crop = img.crop((max(x1-crop_margin, 0), max(y1-crop_margin, 0), min(x2+crop_margin, img.size[0]), min(y2+crop_margin, img.size[1])))
             cropNp = np.array(crop)
-            cropNpCrop = cv2.resize(cropNp, (64, 64))
+            cropNpCrop = cv2.resize(cropNp, (128, 128))
 
-            maxSimilarity = 0
+            image_features = features_model.predict(np.expand_dims(cropNpCrop/255, axis=0))[0]
+
+            minSimilarity = 100
             maxImage = ()
-            for path, image, scorePre in previousImages:
-                similarity = image_distance(image, cropNpCrop)
-                if similarity > maxSimilarity:
-                    maxSimilarity = similarity
-                    maxImage = (path, image, scorePre)
-                #print('similarity', similarity)
+            for path, image_featuresPre, scorePre in previousImages:
+                similarity = image_similarity(image_features, image_featuresPre)
+                if similarity < minSimilarity:
+                    minSimilarity = similarity
+                    maxImage = (path, image_features, scorePre)
+                    #print('similarity', similarity, minSimilarity)
 
-            if maxSimilarity < similarity_trigger:
+            if minSimilarity > similarity_trigger:
                 filename = "{}_{}-{}-{}_{}-{}-{}-{}_{}_{}.jpg".format(now.timestamp(), now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond, i, classe)
-                print('save', filename)
-                filesName.append(filename)
+                print('save', filename, minSimilarity)
                 crop.save(filename)
-                newImages.append((filename, cropNpCrop, score))
+                newImages.append((filename, image_features, score))
                 isNew = True
             else:
                 newImages.append(maxImage)
-                filesName.append(maxImage[0])
 
             draw.rectangle((x1, y1, x2, y2), outline=(0, 255, 0))
-    with open("video_log.csv", "a+") as csv_file:
-        writer = csv.writer(csv_file, delimiter=',')
-        writer.writerow([now.timestamp(), now.isoformat(), isNew, labelCount[0], labelCount[1], labelCount[2], str([x for x, y, z in newImages]), str([z for x, y, z in newImages])])
+
+    if len(newImages) > 0:
+        with open("video_log.csv", "a+") as csv_file:
+            writer = csv.writer(csv_file, delimiter=',')
+            writer.writerow([now.timestamp(), now.isoformat(), isNew, labelCount[0], labelCount[1], labelCount[2], str([x for x, y, z in newImages]), str([z for x, y, z in newImages])])
     return np.array(img), newImages
 
 video = cv2.VideoCapture('example/assiettes.mp4')
@@ -97,7 +97,8 @@ while True:
 
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame = frame.astype(np.uint8)
-    predicted_image, previousImage = imageDetect(frame, previousImage)
+    predicted_image, previousImageTmp = imageDetect(frame, previousImage)
+    previousImage +=previousImageTmp
 
     predicted_image = cv2.cvtColor(predicted_image, cv2.COLOR_RGB2BGR)
     outWriter.write(predicted_image)
