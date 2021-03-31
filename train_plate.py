@@ -57,17 +57,20 @@ else:
 
 classifier.fit(train_generator, steps_per_epoch=train_generator.samples//batch_size, epochs=epochs, validation_data=validation_generator, validation_steps=validation_generator.samples//batch_size_val)
 classifier.save(model_name)
+#classifier.summary()
 
-model_features = Model(inputs=[classifier.input], outputs=[classifier.layers[-4].output])
+model_features = Model(inputs=classifier.input, outputs=[classifier.layers[-4].output])
 model_features.save(model_name_features)
+#model_features.summary()
 
-features_input = Input(shape=classifier.layers[-3].input_shape)
+features_input = Input(shape=classifier.layers[-3].input_shape[1:])
 x = Dense(64, activation='relu')(features_input)
 x = Dense(2, activation='sigmoid')(x)
 model_plate = Model(inputs=[features_input], outputs=[x])
 model_plate.layers[-1].set_weights(classifier.layers[-1].get_weights())
 model_plate.layers[-2].set_weights(classifier.layers[-3].get_weights())
 model_plate.save(model_name_plate)
+#model_plate.summary()
 
 def load_image_into_numpy_array(path):
     img = tf.io.read_file(path)
