@@ -28,7 +28,8 @@ from watchdog.events import FileSystemEventHandler
 ### Settings
 SCRIPT_PATH = os.path.dirname(os.path.realpath(sys.argv[0]))
 PATH_TO_MODEL_DIR = SCRIPT_PATH + '/detection_model/'
-PATH_TO_MODEL_PLATE_DIR = SCRIPT_PATH + '/plate_model/'
+PATH_TO_MODEL_FEATURES_DIR = SCRIPT_PATH + '/plate_model_features.h5'
+PATH_TO_MODEL_PLATE_DIR = SCRIPT_PATH + '/plate_model.h5'
 BOX_DRAW_THRESHOLD = 0.5
 LISTENING_PATH = sys.argv[1]
 OUTPUT_PATH = '/tmp/foodSeg/' #'output'　'/tmp/foodSeg/'
@@ -37,7 +38,7 @@ BOX_SIZE_MIN = 0.1
 BOX_SIZE_MAX = 0.8
 BOX_MARGIN = 10
 
-SIMILARITY_TRIGGER = 10
+SIMILARITY_TRIGGER = 4
 ### End of settings
 
 print('Image box watchdog, running from {}'.format(SCRIPT_PATH), flush=True)
@@ -47,8 +48,8 @@ detect_fn = tf.saved_model.load(PATH_TO_MODEL_DIR)
 print('Model loaded', flush=True)
 
 print('Loading model from "{}"...'.format(PATH_TO_MODEL_PLATE_DIR), flush=True)
+features_model = tf.keras.models.load_model(PATH_TO_MODEL_FEATURES_DIR)
 plate_model = tf.keras.models.load_model(PATH_TO_MODEL_PLATE_DIR)
-features_model = tf.keras.models.Model(inputs=plate_model.input, outputs=plate_model.layers[-6].output)
 print('Models loaded', flush=True)
 
 images_history = []
@@ -124,17 +125,16 @@ def detect_bbox_from_image_path(image_path):
             crop_img = img.crop((max(x1-BOX_MARGIN, 0), max(y1-BOX_MARGIN, 0), min(x2+BOX_MARGIN, x2*img.size[0]), min(y2+BOX_MARGIN, y2*img.size[1])))
             crop_img_resize = crop_img.resize((128, 128))
 
+            image_features = features_model.predict(np.expand_dims(np.array(crop_img_resize)/255, axis=0))[0]
             if classe == 1:
-                platePrediction = plate_model.predict(np.expand_dims(np.array(crop_img_resize)/255, axis=0))[0]
+                platePrediction = plate_model.predict(np.expand_dims(image_features, axis=0))[0]
                 if platePrediction[1] < 0.4:
                     print("Seems to to be an empty plate", platePrediction, flush=True)
                     continue
 
-            image_features = features_model.predict(np.expand_dims(np.array(crop_img_resize)/255, axis=0))[0]
             hasSimilar = False
             for date, image_features2 in images_history_previous:
                 similarity = image_similarity(image_features, image_features2)
-                print('Similarity to previous images', similarity, flush=True)
                 if similarity < SIMILARITY_TRIGGER:
                     print('Similar to previous images', similarity, flush=True)
                     hasSimilar = True
