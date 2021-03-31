@@ -98,7 +98,6 @@ def detect_bbox_from_image_path(image_path):
     # crop and draw each detection box
     box_img = img.copy()
     draw = ImageDraw.Draw(box_img)
-    cropedImages = []
     labelCount = {0:0, 1:0, 2:0, 3:0}
     labeledImage = {0:[], 1:[], 2:[], 3:[]}
     images_history_previous = [x for x in images_history]
@@ -124,35 +123,35 @@ def detect_bbox_from_image_path(image_path):
 
             crop_img = img.crop((max(x1-BOX_MARGIN, 0), max(y1-BOX_MARGIN, 0), min(x2+BOX_MARGIN, x2*img.size[0]), min(y2+BOX_MARGIN, y2*img.size[1])))
             crop_img_resize = crop_img.resize((128, 128))
+            crop_filename = "{}_{}-{}.jpg".format(image_timestamp_str, i, classe)
 
             image_features = features_model.predict(np.expand_dims(np.array(crop_img_resize)/255, axis=0))[0]
+            platePrediction = [0, -1]
             if classe == 1:
                 platePrediction = plate_model.predict(np.expand_dims(image_features, axis=0))[0]
-                if platePrediction[1] < 0.4:
-                    print("Seems to to be an empty plate", platePrediction, flush=True)
+                if platePrediction[1] < 0.2:
+                    print("Seems to be an empty plate", platePrediction, flush=True)
                     continue
 
             hasSimilar = False
-            for date, image_features2 in images_history_previous:
+            for date, filename, image_features2 in images_history_previous:
                 similarity = image_similarity(image_features, image_features2)
                 if similarity < SIMILARITY_TRIGGER:
-                    print('Similar to previous images', similarity, flush=True)
+                    print('Similar to previous images', similarity, filename, flush=True)
                     hasSimilar = True
+                    crop_filename = filename
                     break
 
-            crop_filename = "{}_{}-{}.jpg".format(image_timestamp_str, i, classe)
-            labeledImage[classe].append((crop_filename, score, hasSimilar))
+            labeledImage[classe].append((crop_filename, score, hasSimilar, platePrediction[1]))
             labelCount[classe]+=1
 
             if hasSimilar:
                 print("Do not copy similar image", flush=True)
                 continue
 
-            cropedImages.append((crop_filename, score, classe))
-
             dest_path_crop = "{}/{}".format(OUTPUT_PATH, crop_filename)
             crop_img.save(dest_path_crop)
-            addToHistory((image_timestamp, image_features))
+            addToHistory((image_timestamp, crop_filename, image_features))
 
             os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_crop)
             os.remove(dest_path_crop)
@@ -166,35 +165,31 @@ def detect_bbox_from_image_path(image_path):
 #    os.system('/home/pi/foodSegmentation/script/rpi/03_send.sh ' + dest_path_box)
     # end of debugging only
 
-    #if len(cropedImages) == 0:
-    #    print('Nothing found, nothing was uploaded...', flush=True)
-    #    return
     if labelCount[0] == 0  and labelCount[1] == 0  and labelCount[2] == 0:
         print('Nothing found, nothing was uploaded...', flush=True)
         return
 
     dest_path_out_csv  = "{}/{}.csv".format(OUTPUT_PATH, image_timestamp_str)
 
-    with open(dest_path_out_csv, "a+") as csv_file:
+    with open(dest_path_out_csv, "w") as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
         writer.writerow(
             [image_timestamp_str, image_timestamp.isoformat(),
             labelCount[0], labelCount[1], labelCount[2],
-            str([x for x, y, z in cropedImages]),
-            str([y for x, y, z in cropedImages]),
-            str([z for x, y, z in cropedImages]),
 
-            str([x for x, y, z in labeledImage[0]]),
-            str([x for x, y, z in labeledImage[1]]),
-            str([x for x, y, z in labeledImage[2]]),
+            str([x for x, y, z, a in labeledImage[0]]),
+            str([x for x, y, z, a in labeledImage[1]]),
+            str([x for x, y, z, a in labeledImage[2]]),
 
-            str([y for x, y, z in labeledImage[0]]),
-            str([y for x, y, z in labeledImage[1]]),
-            str([y for x, y, z in labeledImage[2]]),
+            str([y for x, y, z, a in labeledImage[0]]),
+            str([y for x, y, z, a in labeledImage[1]]),
+            str([y for x, y, z, a in labeledImage[2]]),
 
-            str([z for x, y, z in labeledImage[0]]),
-            str([z for x, y, z in labeledImage[1]]),
-            str([z for x, y, z in labeledImage[2]]),
+            str([z for x, y, z, a in labeledImage[0]]),
+            str([z for x, y, z, a in labeledImage[1]]),
+            str([z for x, y, z, a in labeledImage[2]]),
+
+            str([a for x, y, z, a in labeledImage[1]]),
             ]
         )
 
