@@ -38,7 +38,7 @@ if os.path.exists(model_name):
     print("Load: " + model_name)
     classifier = load_model(model_name)
 else:
-    in1 = Input(shape=(128, 128)+ (3,))
+    in1 = Input(shape=image_size+ (3,))
     x = Conv2D(16, (3, 3), activation='relu', input_shape= image_size+(3,))(in1)
     x = MaxPooling2D(pool_size=(2, 2))(x)
     x = Conv2D(32, (3, 3), activation='relu')(x)
